@@ -49,9 +49,9 @@ void BR_XBEE_InitIF(void)
 	uart_cfg.Stopbits = UART_STOPBIT_1;
 
 	// Initialize UART peripheral with parameter given in structure above
-	UART_Init(LPC_UART2, &SSP_ConfigStruct);
+	UART_Init(LPC_UART2, &uart_cfg);
 	// Enable UART peripheral
-	UART_Cmd(LPC_UART2, ENABLE);
+	UART_TxCmd(LPC_UART2, ENABLE);
 
 	// Configure XBEE reset line and set high
 	GPIO_SetDir(RST_PORT_NUM, RST_PIN_NUM, 1);
@@ -82,7 +82,7 @@ void BR_XBEE_SendBuffer(uint8_t *data, uint16_t length)
 	for(i = 0; i < length; i++)
 	{
 	    while(UART_CheckBusy(LPC_UART2) == SET);
-		UART_SendData(LPC_UART2, *data++);
+		UART_SendByte(LPC_UART2, *data++);
 	}
 }
 

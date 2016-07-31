@@ -1,5 +1,6 @@
-SOURCES = LPC1769-XBEE-1_5.c
+SOURCES = LPC1769-XBEE.c
 SOURCES += LPC17XX/System/system_LPC17xx.c
+SOURCES += retarget.c
 SOURCES += Drivers/BR_XBEE/BR_XBEE_Driver.c
 SOURCES += Drivers/BR_XBEE/BR_XBEE_HWIF.c
 SOURCES += Drivers/BR_SysTick/BR_SysTick.c

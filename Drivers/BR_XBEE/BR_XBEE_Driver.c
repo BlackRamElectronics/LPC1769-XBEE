@@ -5,8 +5,8 @@
 
 #include <stdint.h>         // Include standard types
 #include <stdio.h>
-#include "XBEE_Driver.h"
-#include "XBEE_HWIF.h"
+#include "BR_XBEE_Driver.h"
+#include "BR_XBEE_HWIF.h"
 
 //====================================================================================
 
@@ -22,5 +22,7 @@ void BR_XBEE_Init(void)
     BR_XBEE_MsDelay(50);		// Delay for 50ms
 
     // Initialization Sequence
+    BR_XBEE_SendBuffer("+++", 3);
     
+    BR_XBEE_SendBuffer("AT+HV", 5);
 }

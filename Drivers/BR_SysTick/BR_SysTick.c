@@ -1,4 +1,5 @@
 #include "lpc17xx_libcfg.h"
+#include "lpc17xx_systick.h"
 #include "BR_SysTick.h"
 
 volatile uint32_t msTicks = 0; // counter for 1ms SysTicks
