@@ -17,7 +17,7 @@
 int main()
 {
 	uint8_t led = 0, j = 0;
-
+	
 	// Init SysTick
 	BR_SysTickInit();
 
@@ -25,7 +25,6 @@ int main()
 
 	BR_MsDelay(500);
 	printf("Black Ram XBEE\r\n");
-
 
 	// Init on-board LED as output
 	GPIO_SetDir(LED_PORT_NUM, LED_PIN_NUM, 1);

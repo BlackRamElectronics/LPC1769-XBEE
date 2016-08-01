@@ -53,9 +53,16 @@ void BR_XBEE_InitIF(void)
 	UART_Init(LPC_UART2, &uart_cfg);
 	
 	UART_IntConfig(LPC_UART2, UART_INTCFG_RBR, ENABLE);
+	UART_IntConfig(LPC_UART2, UART_INTCFG_RLS, ENABLE);
 	
 	// Enable UART peripheral
 	UART_TxCmd(LPC_UART2, ENABLE);
+
+	// preemption = 1, sub-priority = 1
+    NVIC_SetPriority(UART2_IRQn, ((0x01<<3)|0x01));
+	// Enable Interrupt for UART0 channel
+    NVIC_EnableIRQ(UART2_IRQn);
+
 
 	// Configure XBEE reset line and set high
 	GPIO_SetDir(RST_PORT_NUM, RST_PIN_NUM, 1);
@@ -96,93 +103,128 @@ volatile uint8_t rx = 0;
 uint8_t BR_XBEE_BytesRead()
 {
 
-	if(UART_ReceiveByte(LPC_UART2) != 0)
+	/*if(UART_ReceiveByte(LPC_UART2) != 0)
 	{
 		return(1);
 	}
 	else
 	{
 		return(0);
-	}
+	}*/
 	
+	uint8_t temp_rx = rx;
+	rx = 0;
 	
-	
-	
-	return(rx);
+	return(temp_rx);
 }
 
 //====================================================================================
 void UART2_IRQHandler(void)
 {
-	uint8_t IIRValue, LSRValue;
-	uint8_t Dummy = Dummy;
-	
-	uint8_t UART2Status;
-	
-	printf("!\r\n");
-	
-	IIRValue = LPC_UART2->IIR;
-	
-	IIRValue >>= 1;				// Skip pending bit in IIR
-	IIRValue &= 0x07;			// Check bit 1~3, interrupt identification
-	if(IIRValue == UART_INTCFG_RLS)		// Receive Line Status
+	uint32_t intsrc, tmp, tmp1;
+
+	// Determine the interrupt source
+	intsrc = UART_GetIntId(LPC_UART2);
+	tmp = intsrc & UART_IIR_INTID_MASK;
+
+	// Receive Line Status
+	if(tmp == UART_IIR_INTID_RLS)
 	{
-		LSRValue = LPC_UART0->LSR;
-		// Receive Line Status
-		if(LSRValue & (UART_LSR_OE|UART_LSR_PE|UART_LSR_FE|UART_LSR_RXFE|UART_LSR_BI))
+		// Check line status
+		tmp1 = UART_GetLineStatus(LPC_UART2);
+		// Mask out the Receive Ready and Transmit Holding empty status
+		tmp1 &= (UART_LSR_OE | UART_LSR_PE | UART_LSR_FE | UART_LSR_BI | UART_LSR_RXFE);
+		// If any error exist
+		if(tmp1)
 		{
-			// There are errors or break interrupt
-			// Read LSR will clear the interrupt
-			UART2Status = LSRValue;
-			Dummy = LPC_UART2->RBR;		// Dummy read on RX to clear interrupt, then bail out
-			return;
-		}
-		
-		if(LSRValue & UART_LSR_RDR)	// Receive Data Ready
-		{
-			// If no error on RLS, normal ready, save into the data buffer.
-			// Note: read RBR will clear the interrupt
-			printf("RX1, %d\n", LPC_UART1->RBR);
-			rx++;
-			/*UART1Buffer[UART1Count] = LPC_UART1->RBR;
-			UART1Count++;
-			if(UART1Count == BUFSIZE)
-			{
-				UART1Count = 0;		// Buffer overflow
-			}*/
+				UART_IntErr(tmp1);
 		}
 	}
-	else if(IIRValue == UART_IIR_INTID_RDA)	// Receive Data Available
+
+	// Receive Data Available or Character time-out
+	if((tmp == UART_IIR_INTID_RDA) || (tmp == UART_IIR_INTID_CTI))
 	{
-		// Receive Data Available
-		printf("RX2: %d\n", LPC_UART1->RBR);
-		rx++;
-		/*UART1Buffer[UART1Count] = LPC_UART1->RBR;
-		UART1Count++;
-		if(UART1Count == BUFSIZE)
-		{
-	  		UART1Count = 0;			// Buffer overflow
-		}*/
-  	}
-	else if(IIRValue == UART_IIR_INTID_CTI)	// Character timeout indicator
-	{
-		printf("CTI\n");
-		// Character Time-out indicator
-		UART2Status |= 0x100;		// Bit 9 as the CTI error
+		UART_IntReceive();
 	}
-	else if(IIRValue == UART_IIR_INTID_THRE)	// THRE, transmit holding register empty
+
+	// Transmit Holding Empty
+	if(tmp == UART_IIR_INTID_THRE)
 	{
-		// THRE interrupt
-		LSRValue = LPC_UART2->LSR;	// Check status in the LSR to see if valid data in U0THR or not
-		/*if(LSRValue & LSR_THRE)
-		{
-			UART1TxEmpty = 1;
+		UART_IntTransmit();
+	}
+}
+
+//====================================================================================
+void UART_IntReceive(void)
+{
+	uint8_t temp = UART_ReceiveByte((LPC_UART_TypeDef *)LPC_UART2);
+	
+	rx = 1;
+	
+	/*uint8_t tmpc;
+	uint32_t rLen;
+
+	while(1){
+		// Call UART read function in UART driver
+		rLen = UART_Receive((LPC_UART_TypeDef *)LPC_UART0, &tmpc, 1, NONE_BLOCKING);
+		// If data received
+		if (rLen){
+			// Check if buffer is more space If no more space, remaining character will be trimmed out
+			if (!__BUF_IS_FULL(rb.rx_head,rb.rx_tail)){
+				rb.rx[rb.rx_head] = tmpc;
+				__BUF_INCR(rb.rx_head);
+			}
 		}
-		else
-		{
-			UART1TxEmpty = 0;
-		}*/
-	}
+		// no more data
+		else {
+			break;
+		}
+	}*/
+}
+
+//====================================================================================
+void UART_IntTransmit(void)
+{
+
+
+/*
+    // Disable THRE interrupt
+    UART_IntConfig((LPC_UART_TypeDef *)LPC_UART0, UART_INTCFG_THRE, DISABLE);
+
+	// Wait for FIFO buffer empty, transfer UART_TX_FIFO_SIZE bytes
+	// of data or break whenever ring buffers are empty
+	// Wait until THR empty
+    while (UART_CheckBusy((LPC_UART_TypeDef *)LPC_UART0) == SET);
+
+	while (!__BUF_IS_EMPTY(rb.tx_head,rb.tx_tail))
+    {
+        // Move a piece of data into the transmit FIFO
+    	if (UART_Send((LPC_UART_TypeDef *)LPC_UART0, (uint8_t *)&rb.tx[rb.tx_tail], 1, NONE_BLOCKING)){
+        // Update transmit ring FIFO tail pointer
+        __BUF_INCR(rb.tx_tail);
+    	} else {
+    		break;
+    	}
+    }
+
+    // If there is no more data to send, disable the transmit
+    //   interrupt - else enable it or keep it enabled
+	if (__BUF_IS_EMPTY(rb.tx_head, rb.tx_tail)) {
+    	UART_IntConfig((LPC_UART_TypeDef *)LPC_UART0, UART_INTCFG_THRE, DISABLE);
+    	// Reset Tx Interrupt state
+    	TxIntStat = RESET;
+    }
+    else{
+      	// Set Tx Interrupt state
+		TxIntStat = SET;
+    	UART_IntConfig((LPC_UART_TypeDef *)LPC_UART0, UART_INTCFG_THRE, ENABLE);
+    }*/
+}
+
+//====================================================================================
+void UART_IntErr(uint8_t bLSErrType)
+{
+	while(1);
 }
 
 //====================================================================================
