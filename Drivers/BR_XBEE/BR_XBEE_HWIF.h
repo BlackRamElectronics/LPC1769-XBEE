@@ -5,6 +5,7 @@ void BR_XBEE_InitIF(void);
 void BR_XBEE_MsDelay(uint32_t ms_delay);
 void BR_XBEE_SendByte(uint8_t data);
 void BR_XBEE_SendBuffer(uint8_t *data, uint16_t length);
+uint8_t BR_XBEE_BytesRead();
 void BR_XBEE_ResetAssert(void);
 void BR_XBEE_ResetDeassert(void);
 

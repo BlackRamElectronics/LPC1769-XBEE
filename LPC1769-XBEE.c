@@ -23,6 +23,10 @@ int main()
 
 	HardwareInit();
 
+	BR_MsDelay(500);
+	printf("Black Ram XBEE\r\n");
+
+
 	// Init on-board LED as output
 	GPIO_SetDir(LED_PORT_NUM, LED_PIN_NUM, 1);
 
@@ -42,8 +46,6 @@ int main()
 
 	// Init the XBEE module and required hardware
 	BR_XBEE_Init();
-
-	printf("Black Ram XBEE\r\n");
 
 	for(;;)
 	{
