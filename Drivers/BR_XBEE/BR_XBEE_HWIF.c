@@ -52,7 +52,7 @@ void BR_XBEE_InitIF(void)
 	// Initialize UART peripheral with parameter given in structure above
 	UART_Init(LPC_UART2, &uart_cfg);
 	
-	UART_IntConfig(LPC_UART2, UART_INTCFG_RBR | UART_INTCFG_RLS, ENABLE);
+	UART_IntConfig(LPC_UART2, UART_INTCFG_RBR, ENABLE);
 	
 	// Enable UART peripheral
 	UART_TxCmd(LPC_UART2, ENABLE);
