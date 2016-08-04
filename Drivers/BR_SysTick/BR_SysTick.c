@@ -32,4 +32,3 @@ void BR_MsDelay(uint32_t ms)
 	timer_mark = msTicks;					// Take timer snapshot 
 	while(msTicks < (timer_mark + ms));	// Wait until ms has passed
 }
-

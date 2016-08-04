@@ -23,6 +23,14 @@
 #define RST_PORT_NUM	2
 #define RST_PIN_NUM		(1<<6)
 
+// Reading and writing is interrupt driver and buffered by the following ring buffers
+uint8_t read_buffer_data[16];
+uint8_t write_buffer_data[16];
+BR_RingBuff_T read_buffer;
+BR_RingBuff_T write_buffer;
+
+bool TX_Active;
+
 //====================================================================================
 void BR_XBEE_InitIF(void)
 {
@@ -41,6 +49,12 @@ void BR_XBEE_InitIF(void)
 	pinsel_cfg.Pinnum = PINSEL_PIN_11;
 	PINSEL_ConfigPin(&pinsel_cfg);
 
+	TX_Active = false;
+	
+	// Configure the ring buffers for reading and writing
+	BR_RingBuff_Init(read_buffer, read_buffer_data, sizeof(read_buffer_data));
+	BR_RingBuff_Init(write_buffer, write_buffer_data, sizeof(write_buffer_data));
+	
 	// Initialize UART configuration structure to default
 	UART_ConfigStructInit(&uart_cfg);
 
@@ -54,6 +68,7 @@ void BR_XBEE_InitIF(void)
 	
 	UART_IntConfig(LPC_UART2, UART_INTCFG_RBR, ENABLE);
 	UART_IntConfig(LPC_UART2, UART_INTCFG_RLS, ENABLE);
+	UART_IntConfig(LPC_UART2, UART_INTCFG_THRE, ENABLE);
 	
 	// Enable UART peripheral
 	UART_TxCmd(LPC_UART2, ENABLE);
@@ -76,46 +91,34 @@ void BR_XBEE_MsDelay(uint32_t ms_delay)
 }
 
 //====================================================================================
-void BR_XBEE_SendByte(uint8_t data)
+void BR_XBEE_SendByte(const uint8_t data)
 {
-	UART_SendByte(LPC_UART2,data);
+	// Add data byte to transmit buffer, block if buffer full
+	while(BR_RingBuff_Push(write_buffer, data) == false);
+	
+	// If we are not currently transmitting then enable the TX interrupt
+	if(TX_Active == false)
+	{
+		TX_Active = true;
+		UART_IntConfig(LPC_UART2, UART_INTCFG_THRE, ENABLE);
+	}
 }
 
 //====================================================================================
-void BR_XBEE_SendBuffer(uint8_t *data, uint16_t length)
+void BR_XBEE_SendBuffer(const uint8_t *data, const uint16_t length)
 {
-    uint8_t *data_ptr = data;
-    uint16_t remaining_length = length;
-    uint16_t current_tx_length;
-
 	uint16_t i;
 
 	for(i = 0; i < length; i++)
 	{
-	    while(UART_CheckBusy(LPC_UART2) == SET);
-		UART_SendByte(LPC_UART2, *data++);
+	    BR_XBEE_SendByte(*data++);
 	}
 }
 
-volatile uint8_t rx = 0;
-
 //====================================================================================
-uint8_t BR_XBEE_BytesRead()
+bool BR_XBEE_GetByte(uint8_t *data)
 {
-
-	/*if(UART_ReceiveByte(LPC_UART2) != 0)
-	{
-		return(1);
-	}
-	else
-	{
-		return(0);
-	}*/
-	
-	uint8_t temp_rx = rx;
-	rx = 0;
-	
-	return(temp_rx);
+	return(BR_RingBuff_Pop(read_buffer, data));
 }
 
 //====================================================================================
@@ -137,7 +140,7 @@ void UART2_IRQHandler(void)
 		// If any error exist
 		if(tmp1)
 		{
-				UART_IntErr(tmp1);
+			UART_IntErr(tmp1);
 		}
 	}
 
@@ -157,26 +160,32 @@ void UART2_IRQHandler(void)
 //====================================================================================
 void UART_IntReceive(void)
 {
-	uint8_t temp = UART_ReceiveByte((LPC_UART_TypeDef *)LPC_UART2);
-	
-	rx = 1;
+	// Read the pending byte for the register and store in the receive buffer
+	BR_RingBuff_Push(read_buffer, UART_ReceiveByte((LPC_UART_TypeDef *)LPC_UART2));
+
+	/*uint8_t temp = UART_ReceiveByte((LPC_UART_TypeDef *)LPC_UART2);
+	rx = 1;*/
 	
 	/*uint8_t tmpc;
 	uint32_t rLen;
 
-	while(1){
+	while(1)
+	{
 		// Call UART read function in UART driver
 		rLen = UART_Receive((LPC_UART_TypeDef *)LPC_UART0, &tmpc, 1, NONE_BLOCKING);
 		// If data received
-		if (rLen){
-			// Check if buffer is more space If no more space, remaining character will be trimmed out
-			if (!__BUF_IS_FULL(rb.rx_head,rb.rx_tail)){
+		if(rLen)
+		{
+			// Check if buffer is more space if no more space, remaining character will be trimmed out
+			if(!__BUF_IS_FULL(rb.rx_head,rb.rx_tail))
+			{
 				rb.rx[rb.rx_head] = tmpc;
 				__BUF_INCR(rb.rx_head);
 			}
 		}
 		// no more data
-		else {
+		else
+		{
 			break;
 		}
 	}*/
@@ -185,11 +194,23 @@ void UART_IntReceive(void)
 //====================================================================================
 void UART_IntTransmit(void)
 {
+	uint8_t temp;
+	if(BR_RingBuff_Pop(write_buffer, &temp) == true)
+	{
+		// Should not be busy here but make sure
+		while(UART_CheckBusy(LPC_UART2) == SET);
+		UART_SendByte(LPC_UART2, temp);
+	}
+	else
+	{
+		// Data in buffer to send, disable TX interrupt
+		UART_IntConfig(LPC_UART2, UART_INTCFG_THRE, DISABLE);
+		
+		TX_Active = false;
+	}
 
-
-/*
     // Disable THRE interrupt
-    UART_IntConfig((LPC_UART_TypeDef *)LPC_UART0, UART_INTCFG_THRE, DISABLE);
+    /*UART_IntConfig((LPC_UART_TypeDef *)LPC_UART0, UART_INTCFG_THRE, DISABLE);
 
 	// Wait for FIFO buffer empty, transfer UART_TX_FIFO_SIZE bytes
 	// of data or break whenever ring buffers are empty

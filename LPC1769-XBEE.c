@@ -44,7 +44,15 @@ int main()
 	GPIO_SetValue(LED_PORT_NUM, LED_PIN_NUM);
 
 	// Init the XBEE module and required hardware
-	BR_XBEE_Init();
+	if(BR_XBEE_Init() != BR_XBEE_RESULT_OK)
+	{
+		printf("Error in XBEE init\r\n");
+		return(0);
+	}
+	else
+	{
+		printf("XBEE Init OK\r\n");
+	}
 
 	for(;;)
 	{
